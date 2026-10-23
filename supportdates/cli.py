@@ -329,7 +329,7 @@ SITE_CONFIG = {"alerts_form_action": "ALERTS_FORM_ACTION", "checkout_pro": "CHEC
                "imprint_url": "https://asknau.com/en/legal-notice/",
                "services_contact": "SERVICES_CONTACT", "checkout_fact_sheet": "CHECKOUT_FACT_SHEET_URL",
                "checkout_bms_watch": "CHECKOUT_BMS_WATCH_URL",
-               "sample_report_url": "SAMPLE_REPORT_URL", "api_contact": "API_CONTACT"}
+               "sample_report_url": "SAMPLE_REPORT_URL", "api_contact": "supportdates@asknau.com"}
 BMS_COMPONENTS = ("Tridium Niagara", "Johnson Controls EOS", "Ignition")
 SITE_URL = "https://supportdates.com/"
 DATA_LICENCE = ('Data: <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, attribution "supportdates.com" '

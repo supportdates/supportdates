@@ -33,6 +33,10 @@ def diff(old: list[Record], new: list[Record]) -> list[dict]:
         # 'LX2080A' -> 'LX2080A, LX2082A': the part is still listed, now in a combined cell
         merged = next((n for n in b.keys() - a.keys() if n[0] == k[0] and n[1] != k[1]
                        and k[1] in [x.strip() for x in n[1].split(",")]), None)
+        # 'Node.js 27' -> '27 LTS' with the same dates: a suffix (status) added to the same line, not a new line
+        suffixed = [n for n in b.keys() - a.keys() if n[0] == k[0] and n[1].startswith(k[1] + " ")
+                    and (b[n].released, b[n].eol) == (a[k].released, a[k].eol)]
+        merged = merged or (suffixed[0] if len(suffixed) == 1 else None)
         if merged:
             changes = [c for c in changes if not (c["change"] == "added" and (c["component"], c["line"]) == merged)]
             changes.append({"change": "renamed", "component": k[0], "line": merged[1], "old": k[1], "new": merged[1]})

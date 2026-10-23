@@ -758,6 +758,19 @@ class BeckhoffTest(unittest.TestCase):
         self.assertIn("end of delivery", recs["C3320-0070"].evidence)
 
 
+class SuffixRenameTest(unittest.TestCase):
+    def test_suffix_with_same_dates_is_a_rename(self):
+        old = [Record("Node.js", "27", "2026-04-22", "2030-04-30", "official", "n", "e")]
+        new = [Record("Node.js", "27 LTS", "2026-04-22", "2030-04-30", "official", "n", "e")]
+        self.assertEqual(diff(old, new), [{"change": "renamed", "component": "Node.js", "line": "27 LTS",
+                                           "old": "27", "new": "27 LTS"}])
+
+    def test_suffix_with_other_dates_stays_removed_and_added(self):
+        old = [Record("Node.js", "27", "2026-04-22", "2030-04-30", "official", "n", "e")]
+        new = [Record("Node.js", "27 LTS", "2026-04-22", "2031-04-30", "official", "n", "e")]
+        self.assertEqual(sorted(c["change"] for c in diff(old, new)), ["added", "removed"])
+
+
 class GunzipTest(unittest.TestCase):
     def test_gzip_bodies_are_decompressed_plain_kept(self):
         self.assertEqual(gunzip_if_needed(gzip.compress(b"<table>")), b"<table>")

@@ -3,7 +3,7 @@
     python -m supportdates.upstream --data data --out upstream/endoflife
 
 Facts come from our latest snapshot (cycles, release/end dates, sources) and `git ls-remote --tags`
-(latest patch per cycle). Anything not known exactly is written as TODO for the founder to fill in before a PR.
+(latest patch per cycle). Anything not known exactly is written as TODO, to fill in by hand before a PR.
 These are drafts for an upstream contribution (distribution and reputation), not published by this tool.
 """
 

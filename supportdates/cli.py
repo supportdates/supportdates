@@ -304,7 +304,7 @@ def public_only(items: list) -> list:
     return [x for x in items if not private(x)]
 
 
-# Founder decisions before publishing (placeholders; nothing is live).
+# Site settings: placeholders are replaced when the site is configured.
 SITE_CONFIG = {"alerts_form_action": "ALERTS_FORM_ACTION", "checkout_pro": "CHECKOUT_PRO_URL",
                "checkout_team": "CHECKOUT_TEAM_URL", "privacy_url": "https://asknau.com/en/privacy-policy/",
                "imprint_url": "https://asknau.com/en/legal-notice/",

@@ -2,7 +2,7 @@
 
     python -m supportdates.proof --data data                 (chain manifests for all snapshots, local only)
     python -m supportdates.proof --data data --tsq            (also write RFC 3161 requests via openssl)
-    python -m supportdates.proof --data data --submit URL     (send requests to a timestamp authority: founder decision)
+    python -m supportdates.proof --data data --submit URL     (send requests to a timestamp authority: the operator's choice)
 
 Each manifest (data/proofs/<day>.json) holds the snapshot's sha256, the per-source document hashes it recorded and
 the sha256 of the previous day's manifest. Editing any past snapshot breaks every later link, so the history can be

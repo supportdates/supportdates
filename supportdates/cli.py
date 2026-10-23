@@ -72,14 +72,20 @@ def pdf_text(data: bytes, mode: str = "-layout") -> str:
     return subprocess.run(["pdftotext", mode, "-", "-"], input=data, capture_output=True, check=True).stdout.decode()
 
 
-def collect_all() -> tuple[list[src.Record], dict[str, str], list[str], set[str]]:
-    """(records, sha256 per raw document, error messages, source URLs that failed)."""
+def collect_all(keep=lambda sha, data: None) -> tuple[list[src.Record], dict[str, str], list[str], set[str]]:
+    """(records, sha256 per raw document, error messages, source URLs that failed).
+    keep(sha, data) receives every hashed raw document, so the evidence behind each hash can be archived."""
     records, hashes, errors, failed = [], {}, [], set()
+
+    def hashed(name, data: bytes):
+        sha = hashlib.sha256(data).hexdigest()
+        hashes[name] = sha
+        keep(sha, data)
 
     def take(name, url, parse, allow_empty=False):
         try:
             text = fetch(url)
-            hashes[name] = hashlib.sha256(text.encode()).hexdigest()
+            hashed(name, text.encode())
             got = parse(text)
             if not got and not allow_empty:
                 errors.append(f"{name}: parser found no records (format change?)")
@@ -104,7 +110,7 @@ def collect_all() -> tuple[list[src.Record], dict[str, str], list[str], set[str]
     try:
         for url in src.rpi_notice_links(fetch(src.RPI_EOL_INDEX)):
             data = fetch_bytes(url)
-            hashes[f"rpi-eol:{url.rsplit('/', 1)[-1]}"] = hashlib.sha256(data).hexdigest()
+            hashed(f"rpi-eol:{url.rsplit('/', 1)[-1]}", data)
             records.extend(src.parse_rpi_eol_notice(pdf_text(data), url))
     except Exception as exc:  # noqa: BLE001
         errors.append(f"rpi eol notices: {exc}")
@@ -147,7 +153,7 @@ def collect_all() -> tuple[list[src.Record], dict[str, str], list[str], set[str]
     def take_pdf(name, url, parse, mode="-layout"):
         try:
             data = fetch_bytes(url)
-            hashes[name] = hashlib.sha256(data).hexdigest()
+            hashed(name, data)
             got = parse(pdf_text(data, mode))
             if not got:
                 errors.append(f"{name}: parser found no records (document changed?)")
@@ -161,7 +167,8 @@ def collect_all() -> tuple[list[src.Record], dict[str, str], list[str], set[str]
         take_pdf(f"rpi:{product}", url, lambda text, p=product, u=url: src.parse_rpi_brief(text, p, u))
     take_pdf("pdf:sma-support", src.SMA_SUPPORT_URL, src.parse_sma_support, "-raw")
     take_pdf("pdf:apsystems-support", src.APSYSTEMS_SUPPORT_URL, src.parse_apsystems_support, "-raw")
-    take_pdf("pdf:solaredge-support", src.SOLAREDGE_SUPPORT_URL, src.parse_solaredge_support, "-raw")
+    # SolarEdge: not collected since 2026-10-22. The only fetchable copy was a reseller's stale v1.1 (2024); the official
+    # note (v1.3, knowledge-center.solaredge.com) sits behind a bot challenge, which we don't circumvent.
     take_pdf("pdf:tridium-n5-faq", src.TRIDIUM_N5_FAQ_URL, src.parse_tridium_n5_faq, "-raw")
     take_pdf("pdf:nuvoton-plp", src.NUVOTON_PLP_URL, src.parse_nuvoton_plp)
     try:
@@ -174,7 +181,7 @@ def collect_all() -> tuple[list[src.Record], dict[str, str], list[str], set[str]
     try:
         months = src.espidf_policy_months(fetch(src.ESPIDF_POLICY_URL))
         releases = json.loads(fetch(src.ESPIDF_RELEASES_URL))
-        hashes["espidf"] = hashlib.sha256(json.dumps(releases, sort_keys=True).encode()).hexdigest()
+        hashed("espidf", json.dumps(releases, sort_keys=True).encode())
         if months:
             records.extend(src.parse_espidf(releases, months))
         else:
@@ -184,6 +191,17 @@ def collect_all() -> tuple[list[src.Record], dict[str, str], list[str], set[str]
         errors.append(f"espidf: {exc}")
         failed.add(src.ESPIDF_POLICY_URL)
     return src.prefer_official(records), hashes, errors, failed
+
+
+def raw_keeper(raw_dir: Path):
+    """keep() for collect_all: store each raw source document once, gzip-compressed, named by its sha256.
+    A private evidence archive: it proves what a hashed page said. Never published or synced to the site."""
+    def keep(sha: str, data: bytes) -> None:
+        path = raw_dir / f"{sha}.gz"
+        if not path.exists():
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(gzip.compress(data, mtime=0))
+    return keep
 
 
 def carry_over(previous: list[src.Record], failed: set[str]) -> list[src.Record]:
@@ -206,7 +224,7 @@ def carry_over_hashes(previous: dict[str, str], now: dict[str, str], failed: set
 def cmd_collect(args) -> int:
     day = args.date or date.today().isoformat()
     for attempt in range(args.retries + 1):
-        records, hashes, errors, failed = collect_all()
+        records, hashes, errors, failed = collect_all(raw_keeper(Path(args.data) / "raw"))
         if records:
             break
         print(f"nothing reachable (attempt {attempt + 1}); network down?", file=sys.stderr)
@@ -289,10 +307,11 @@ def cmd_backfill(args) -> int:
     return 0
 
 
-# Collected for private watch lists only, never on the public site: one public table of several energy-device vendors'
-# security-update dates would read as a named-vendor comparison (filter of 2026-10-16).
-PRIVATE_COMPONENTS = {"SMA security updates", "APsystems security updates", "SolarEdge security updates"}
-PRIVATE_DOCUMENTS = {"pdf:sma-support", "pdf:apsystems-support", "pdf:solaredge-support"}   # their PDF-hash events
+# Never on the public site. SMA and APsystems are public since 2026-10-22 (founder decision 2026-10-21: the 2026-10-16
+# comparison filter was lifted on 2026-10-19, and public snapshots keep the proof chain verifiable). SolarEdge stays
+# private: its records (2026-10-16..21) came from a reseller's stale copy, and it is no longer collected.
+PRIVATE_COMPONENTS = {"SolarEdge security updates"}
+PRIVATE_DOCUMENTS = {"pdf:solaredge-support"}   # its PDF-hash events
 
 
 def public_only(items: list) -> list:

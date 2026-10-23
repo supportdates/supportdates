@@ -7,7 +7,7 @@ from pathlib import Path
 
 from supportdates.backfill import history_events, snapshots, ts_date
 from supportdates.cli import (SITE_CONFIG, alerts_section, api_date, bms_page, carry_over_hashes, services_section, bridge_events, carry_over, eol_api, gunzip_if_needed,
-                            item_pages, public_only, rss_feed, slug)
+                            item_pages, public_only, raw_keeper, rss_feed, slug)
 from supportdates.sources import (Record, espidf_policy_months, freertos_lts_branches, parse_espidf,
                                   parse_criticallink, parse_espressif_advisories, parse_nxp_longevity, parse_phytec, parse_somlabs, parse_toradex_module, toradex_module_pages, _toradex_pdf_date, parse_rpi_eol_notice, rpi_notice_links, parse_freertos_lts, prefer_official, parse_kernel, parse_mbedtls, parse_openwrt, parse_rpi_brief,
                                   parse_variscite, parse_yocto, parse_zephyr, parse_sma_support,
@@ -766,12 +766,28 @@ class GunzipTest(unittest.TestCase):
 
 class PublicOnlyTest(unittest.TestCase):
     def test_private_components_never_published(self):
-        recs = [Record("SMA security updates", "STP50-41", "", "2026", "official", "s", "e"),
+        recs = [Record("SolarEdge security updates", "SE50K", "", "2029", "official", "s", "e"),
+                Record("SMA security updates", "STP50-41", "", "2026", "official", "s", "e"),
                 Record("Variscite SoM", "DART-MX6", "", "2026", "official", "v", "e")]
         events = [{"component": "SolarEdge security updates", "change": "added"}, {"change": "document changed"},
+                  {"component": "source", "line": "pdf:solaredge-support", "change": "document changed"},
                   {"component": "source", "line": "pdf:sma-support", "change": "document changed"}]
-        self.assertEqual([r.line for r in public_only(recs)], ["DART-MX6"])
-        self.assertEqual(public_only(events), [{"change": "document changed"}])
+        self.assertEqual([r.line for r in public_only(recs)], ["STP50-41", "DART-MX6"])
+        self.assertEqual(public_only(events), [{"change": "document changed"},
+                                               {"component": "source", "line": "pdf:sma-support",
+                                                "change": "document changed"}])
+
+
+class RawKeeperTest(unittest.TestCase):
+    def test_each_document_stored_once_by_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            keep = raw_keeper(Path(tmp) / "raw")
+            keep("abc", b"<table>v1</table>")
+            keep("abc", b"ignored: same hash")
+            keep("def", b"%PDF-1.7")
+            files = sorted(p.name for p in (Path(tmp) / "raw").iterdir())
+            self.assertEqual(files, ["abc.gz", "def.gz"])
+            self.assertEqual(gzip.decompress((Path(tmp) / "raw" / "abc.gz").read_bytes()), b"<table>v1</table>")
 
 
 class OpensslPythonTest(unittest.TestCase):

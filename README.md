@@ -18,6 +18,7 @@ Python 3.11+, **standard library only**. PDF sources need `pdftotext` (poppler) 
 - **Libraries:** Mbed TLS, OpenSSL.
 - **Modules, BSPs and chip programmes:** NXP and Renesas product longevity, Nuvoton PLP, NVIDIA Jetson, Toradex (modules + BSP), Variscite, PHYTEC, SoMLabs, Critical Link, Raspberry Pi, Beckhoff IPCs.
 - **Building automation / OT:** Johnson Controls end-of-support list, Ignition LTS, Tridium Niagara.
+- **Energy devices (security-update support periods):** SMA, APsystems.
 
 `supportdates/sources.py` has one small parser per source, each with tests.
 
@@ -31,13 +32,13 @@ python -m supportdates.cle --data data --out site/cle   # ECMA-428 CLE documents
 python -m supportdates.eolcheck PATH...                 # dates for what a project builds on (west.yml, dependencies.lock,
                                                         # conf/layer.conf, modules.txt, CycloneDX/SPDX SBOMs)
 python -m supportdates.mcp --data data                  # minimal MCP server for coding agents
-make test                                               # 112 unit tests
+make test                                               # unit tests
 ```
 
 ## Data
 The published dataset (current records, change history, API, CLE documents) is released under **CC BY 4.0** (see `LICENSE-DATA`): https://supportdates.com. Each record links its original source; quoted excerpts remain the sources' property.
 
-Collection rules: public pages and documents only, once a day, an honest user agent, robots.txt respected. Only extracted facts, short quotes, links and hashes are stored; full documents are not redistributed.
+Collection rules: public pages and documents only, once a day, an honest user agent, robots.txt respected. Only extracted facts, short quotes, links and hashes are published. The collector also keeps each raw document privately, once per hash (`data/raw/`), as evidence of what a hashed page said; these are never redistributed.
 
 ## Contributing
 New sources and corrections are welcome. See `CONTRIBUTING.md`. A wrong date is corrected visibly: the change log keeps the correction.

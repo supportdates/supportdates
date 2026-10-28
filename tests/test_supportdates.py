@@ -1,5 +1,6 @@
 import gzip
 import json
+import re
 import tempfile
 import unittest
 from dataclasses import asdict
@@ -146,16 +147,28 @@ class CriticalLinkTest(unittest.TestCase):
         self.assertEqual((r.component, r.line, r.released), ("Critical Link armc8-platforms", "PCN20230101000", "2023-01-01"))
 
 
+LIVE_CONFIG = {**SITE_CONFIG, "alerts_form_action": "https://forms.example/alerts", "checkout_pro": "https://pay.example/pro",
+               "checkout_team": "https://pay.example/team", "services_contact": "hello@example.com",
+               "sample_report_url": "https://example.com/sample", "checkout_fact_sheet": "https://pay.example/sheet",
+               "checkout_bms_watch": "https://pay.example/watch"}
+
+
 class SiteTest(unittest.TestCase):
-    def test_alerts_fake_door_has_placeholders_and_honesty(self):
-        page = alerts_section(SITE_CONFIG)
-        for k in ("ALERTS_FORM_ACTION", "CHECKOUT_PRO_URL", "CHECKOUT_TEAM_URL", "asknau.com/en/privacy-policy/"):
+    def test_alerts_fake_door_shown_only_when_configured_and_honest(self):
+        page = alerts_section(LIVE_CONFIG)
+        for k in ("forms.example/alerts", "pay.example/pro", "pay.example/team", "asknau.com/en/privacy-policy/"):
             self.assertIn(k, page)
         self.assertIn("in preparation", page)                 # alerts are not claimed as live
         self.assertIn("money-back guarantee", page)
         self.assertIn("as they go live", page)
         self.assertIn("stays free and open", page)
         self.assertNotIn("reserv", page.lower())              # merchants of record restrict pre-orders
+
+    def test_unconfigured_placeholders_never_reach_the_site(self):
+        page = alerts_section(SITE_CONFIG) + services_section(SITE_CONFIG) + bms_page([], SITE_CONFIG)
+        self.assertIsNone(re.search(r"\b(ALERTS_FORM_ACTION|CHECKOUT_[A-Z_]+|SERVICES_CONTACT|SAMPLE_REPORT_URL)\b", page))
+        self.assertIn("in preparation", page)
+        self.assertIn("mailto:supportdates@asknau.com", page)  # the one configured contact stays
 
 
 class EspressifTest(unittest.TestCase):
@@ -181,7 +194,7 @@ class ItemPagesTest(unittest.TestCase):
         self.assertEqual(list(pages), ["variscite-som-var-som-mx6.html"])
         page = pages["variscite-som-var-som-mx6.html"]
         self.assertIn("2027 → 2035", page)
-        self.assertIn("ALERTS_FORM_ACTION", page)
+        self.assertIn("Get notified when a date moves", page)
         self.assertEqual(slug("Zephyr", "3.7 LTS"), "zephyr-3-7-lts")
 
 
@@ -683,17 +696,17 @@ class CarryOverPrefixTest(unittest.TestCase):
 
 class LandingSectionsTest(unittest.TestCase):
     def test_services_and_bms_page(self):
-        svc = services_section(SITE_CONFIG)
+        svc = services_section(LIVE_CONFIG)
         self.assertIn("€3,000–4,500", svc)
-        self.assertIn("mailto:SERVICES_CONTACT", svc)
-        self.assertIn("SAMPLE_REPORT_URL", svc)
+        self.assertIn("mailto:hello@example.com", svc)
+        self.assertIn("example.com/sample", svc)
         self.assertNotIn("compliant", svc.lower())
         recs = [Record("Tridium Niagara", "Niagara 4.15 LTS", "", "2028-09", "derived", "t", "e"),
                 Record("Zephyr", "3.7 LTS", "", "2029-07", "official", "z", "e")]
-        page = bms_page(recs, SITE_CONFIG)
+        page = bms_page(recs, LIVE_CONFIG)
         self.assertIn("Niagara 4.15 LTS", page)
         self.assertNotIn("Zephyr", page)
-        self.assertIn("CHECKOUT_FACT_SHEET_URL", page)
+        self.assertIn("pay.example/sheet", page)
         for word in ("compliant", "secure ", "recommended"):
             self.assertNotIn(word, (svc + page).lower())
 

@@ -365,17 +365,26 @@ with their owners. Facts as published by the sources, provided as is, without wa
 """
 
 
+def configured(value: str) -> bool:
+    """A site setting is live once its ALL_CAPS placeholder has been replaced by a real URL or address."""
+    return bool(value) and not re.fullmatch(r"[A-Z_]+", value)
+
+
 def services_section(cfg: dict) -> str:
     """F1+ offer (bridge to recurring revenue): fixed-price, async services on the same data. Advisory wording only:
-    no conformity, certification or 'compliant' claims; the manufacturer keeps CRA intake and reporting."""
+    no conformity, certification or 'compliant' claims; the manufacturer keeps CRA intake and reporting.
+    Left out until a contact address is configured."""
+    if not configured(cfg["services_contact"]):
+        return ""
     e = {k: html.escape(v) for k, v in cfg.items()}
+    sample = (f' <a href="{e["sample_report_url"]}">See a sample report</a> (public OpenWrt image).'
+              if configured(cfg["sample_report_url"]) else "")
     return f"""<h2>Getting an embedded Linux product ready for the Cyber Resilience Act?</h2>
 <p>Fixed-price, async, remote. Evidence from your own firmware image and published sources; an advisory
 pre-assessment, not a conformity assessment.</p>
 <ul><li><strong>CRA readiness pre-assessment from your firmware image, €3,000–4,500:</strong> component inventory, published
 support periods of your platform, default-configuration facts mapped to CRA Annex I, exploit mitigations, and every
-known-vulnerability candidate triaged into a VEX status with the evidence. <a href="{e['sample_report_url']}">See a sample
-report</a> (public OpenWrt image).</li>
+known-vulnerability candidate triaged into a VEX status with the evidence.{sample}</li>
 <li><strong>Vulnerability triage retainer, from €900/month:</strong> new CVEs in your components triaged within 3 business
 days for non-exploited issues, VEX statements and advisory drafts. You keep vulnerability intake and the CRA Art. 14
 reporting; no on-call.</li>
@@ -392,6 +401,16 @@ def bms_page(recs: list, cfg: dict) -> str:
         f"</td><td>{r.eol or '—'}</td><td>{r.kind}</td><td><a href='{html.escape(r.source)}'>source</a></td></tr>"
         for r in sorted((r for r in recs if r.component in BMS_COMPONENTS), key=lambda r: (BMS_COMPONENTS.index(
             r.component), r.eol or "9999")))
+    offers = ""
+    if configured(cfg["checkout_fact_sheet"]):
+        offers += f"""<h2>For building owners and facility managers</h2>
+<p><strong>Site lifecycle fact sheet, €59 one-time</strong> (founding price, money-back guarantee): send your controller
+and software list; get the published dates for each item with sources, before you decide on a replacement quote.
+<a href="{e['checkout_fact_sheet']}">Order</a>.</p>"""
+    if configured(cfg["checkout_bms_watch"]):
+        offers += f"""<h2>For integrators</h2><p><strong>Portfolio watch, €29/month</strong> (founding members; cancel any time): a private
+watch list for your customers' sites and a monthly change report with sources; email alerts as they go live.
+<a href="{e['checkout_bms_watch']}">Join</a>.</p>"""
     return f"""<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>
 <title>Building Automation Support Dates</title><style>
 :root{{--bg:#fff;--fg:#1b1f24;--line:#d9dee4;--acc:#0b6bcb}}
@@ -407,18 +426,27 @@ Fire, security and life-safety products are not covered.</p>
 availability for December 2026; JACE-8000 ordering closed in Europe on 2025-12-31. Distributor bulletins quote different dates,
 so every date here links its source.</p>
 <div class=wrap><table><tr><th>Source</th><th>Line</th><th>End</th><th>Kind</th><th>Source</th></tr>{rows}</table></div>
-<h2>For building owners and facility managers</h2>
-<p><strong>Site lifecycle fact sheet, €59 one-time</strong> (founding price, money-back guarantee): send your controller
-and software list; get the published dates for each item with sources, before you decide on a replacement quote.
-<a href="{e['checkout_fact_sheet']}">Order</a>.</p>
-<h2>For integrators</h2><p><strong>Portfolio watch, €29/month</strong> (founding members; cancel any time): a private
-watch list for your customers' sites and a monthly change report with sources; email alerts as they go live.
-<a href="{e['checkout_bms_watch']}">Join</a>.</p><p style="color:var(--mut)">{DATA_LICENCE}</p></body></html>"""
+{offers}<p style="color:var(--mut)">{DATA_LICENCE}</p></body></html>"""
 
 
 def alerts_section(cfg: dict) -> str:
-    """Fake-door offer: measures whether people want alerts and which components (the free table stays free)."""
+    """Fake-door offer: measures whether people want alerts and which components (the free table stays free).
+    Until the form backend and checkout links are configured, only a short notice and the API contact are shown."""
     e = {k: html.escape(v) for k, v in cfg.items()}
+    api = (f' Data API for BOM, PLM and EMS tools: <a href="mailto:{e["api_contact"]}">ask</a>.'
+           if configured(cfg["api_contact"]) else "")
+    if not configured(cfg["alerts_form_action"]):
+        return f"""<h2>Get notified when a date moves</h2>
+<p>Support dates and module longevity change: some get extended, some get cut. Alerts are <strong>in preparation</strong>.
+Meanwhile, follow <a href="changes.xml">the change feed (RSS)</a>.{api}</p>"""
+    plans = ""
+    if configured(cfg["checkout_pro"]) and configured(cfg["checkout_team"]):
+        plans = f"""<p><strong>Founding member plans</strong> (annual, for products with long lifecycles; founding price kept on renewal;
+30-day money-back guarantee). The dataset itself stays free and open.
+Product-line watch, €290/year: a private watch list for the modules, BSP lines and libraries of one product, a monthly
+change report for that list with sources, and email alerts for the list as they go live (founding members first)
+(<a href="{e['checkout_pro']}">join</a>). Portfolio watch, €990/year: all product lines, BOM/manifest upload, CSV export
+of your list's history (<a href="{e['checkout_team']}">join</a>).</p>"""
     return f"""<h2>Get notified when a date moves</h2>
 <p>Support dates and module longevity change: some get extended, some get cut. Alerts are <strong>in preparation</strong>;
 leave your list and we email you when they start.</p>
@@ -428,13 +456,7 @@ leave your list and we email you when they start.</p>
 <textarea name=watch rows=4 style="width:100%"></textarea></label><br>
 <label><input type=checkbox name=consent required> Email me about this list only; unsubscribe any time
 (<a href="{e['privacy_url']}">privacy</a>).</label><br><button type=submit>Join the free weekly digest</button></form>
-<p><strong>Founding member plans</strong> (annual, for products with long lifecycles; founding price kept on renewal;
-30-day money-back guarantee). The dataset itself stays free and open.
-Product-line watch, €290/year: a private watch list for the modules, BSP lines and libraries of one product, a monthly
-change report for that list with sources, and email alerts for the list as they go live (founding members first)
-(<a href="{e['checkout_pro']}">join</a>). Portfolio watch, €990/year: all product lines, BOM/manifest upload, CSV export
-of your list's history (<a href="{e['checkout_team']}">join</a>). Data API for BOM, PLM and EMS tools:
-<a href="mailto:{e['api_contact']}">ask</a>.</p>"""
+{plans}<p>{api.strip()}</p>"""
 
 
 def rss_feed(events: list[dict], site_url: str) -> str:

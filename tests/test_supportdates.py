@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from supportdates.backfill import history_events, snapshots, ts_date
-from supportdates.cli import (SITE_CONFIG, alerts_section, api_date, bms_page, carry_over_hashes, services_section, bridge_events, carry_over, eol_api, gunzip_if_needed,
+from supportdates.cli import (SITE_CONFIG, sitemap_xml, alerts_section, api_date, bms_page, carry_over_hashes, services_section, bridge_events, carry_over, eol_api, gunzip_if_needed,
                             item_pages, public_only, raw_keeper, rss_feed, slug)
 from supportdates.sources import (Record, espidf_policy_months, freertos_lts_branches, parse_espidf,
                                   parse_criticallink, parse_espressif_advisories, parse_nxp_longevity, parse_phytec, parse_somlabs, parse_toradex_module, toradex_module_pages, _toradex_pdf_date, parse_rpi_eol_notice, rpi_notice_links, parse_freertos_lts, prefer_official, parse_kernel, parse_mbedtls, parse_openwrt, parse_rpi_brief,
@@ -697,7 +697,9 @@ class CarryOverPrefixTest(unittest.TestCase):
 class LandingSectionsTest(unittest.TestCase):
     def test_services_and_bms_page(self):
         svc = services_section(LIVE_CONFIG)
-        self.assertIn("€3,000–4,500", svc)
+        self.assertIn(SITE_CONFIG["services_url"], svc)
+        self.assertNotIn("€", svc)                     # prices live only on asknau.com
+        self.assertNotIn("business days", svc)        # no SLA promise
         self.assertIn("mailto:hello@example.com", svc)
         self.assertIn("example.com/sample", svc)
         self.assertNotIn("compliant", svc.lower())
@@ -888,3 +890,10 @@ class QtMenderMobyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SitemapTest(unittest.TestCase):
+    def test_index_maps_to_root(self):
+        xml = sitemap_xml(["index.html", "zephyr-3-7.html"], "https://supportdates.com/")
+        self.assertIn("<loc>https://supportdates.com/</loc>", xml)
+        self.assertIn("<loc>https://supportdates.com/zephyr-3-7.html</loc>", xml)

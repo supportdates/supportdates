@@ -327,11 +327,16 @@ def public_only(items: list) -> list:
 SITE_CONFIG = {"alerts_form_action": "ALERTS_FORM_ACTION", "checkout_pro": "CHECKOUT_PRO_URL",
                "checkout_team": "CHECKOUT_TEAM_URL", "privacy_url": "https://asknau.com/en/privacy-policy/",
                "imprint_url": "https://asknau.com/en/legal-notice/",
-               "services_contact": "SERVICES_CONTACT", "checkout_fact_sheet": "CHECKOUT_FACT_SHEET_URL",
+               "services_contact": "info@asknau.com", "checkout_fact_sheet": "CHECKOUT_FACT_SHEET_URL",
                "checkout_bms_watch": "CHECKOUT_BMS_WATCH_URL",
-               "sample_report_url": "SAMPLE_REPORT_URL", "api_contact": "supportdates@asknau.com"}
+               "services_url": "https://asknau.com/en/services/#embedded-linux-lifecycle-and-cra-readiness",
+               "sample_report_url": "https://asknau.com/en/services/cra-sample-report/",
+               "method_url": "https://asknau.com/en/tech-blog/2026/10/29/published-eol-dates-move/",
+               "repo_url": "https://github.com/supportdates/supportdates", "api_contact": "supportdates@asknau.com"}
 BMS_COMPONENTS = ("Tridium Niagara", "Johnson Controls EOS", "Ignition")
 SITE_URL = "https://supportdates.com/"
+FAVICON = Path(__file__).resolve().parent.parent / "brand" / "avatar.svg"
+ICON_LINK = "<link rel=icon href=favicon.svg type='image/svg+xml'>"
 DATA_LICENCE = ('Data: <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, attribution "supportdates.com" '
                 '(current dates and full history; <a href="LICENSE-DATA.txt">details</a>).')
 HEADERS = """/api/*
@@ -371,26 +376,33 @@ def configured(value: str) -> bool:
 
 
 def services_section(cfg: dict) -> str:
-    """F1+ offer (bridge to recurring revenue): fixed-price, async services on the same data. Advisory wording only:
-    no conformity, certification or 'compliant' claims; the manufacturer keeps CRA intake and reporting.
+    """F1+ offer (bridge to recurring revenue), kept apart from the facts-only data. Prices live only on asknau.com,
+    so the two sites can't disagree. Advisory wording only: no conformity, certification or 'compliant' claims.
     Left out until a contact address is configured."""
     if not configured(cfg["services_contact"]):
         return ""
     e = {k: html.escape(v) for k, v in cfg.items()}
-    sample = (f' <a href="{e["sample_report_url"]}">See a sample report</a> (public OpenWrt image).'
+    sample = (f' · <a href="{e["sample_report_url"]}">sample report</a>'
               if configured(cfg["sample_report_url"]) else "")
-    return f"""<h2>Getting an embedded Linux product ready for the Cyber Resilience Act?</h2>
-<p>Fixed-price, async, remote. Evidence from your own firmware image and published sources; an advisory
-pre-assessment, not a conformity assessment.</p>
-<ul><li><strong>CRA readiness pre-assessment from your firmware image, €3,000–4,500:</strong> component inventory, published
-support periods of your platform, default-configuration facts mapped to CRA Annex I, exploit mitigations, and every
-known-vulnerability candidate triaged into a VEX status with the evidence.{sample}</li>
-<li><strong>Vulnerability triage retainer, from €900/month:</strong> new CVEs in your components triaged within 3 business
-days for non-exploited issues, VEX statements and advisory drafts. You keep vulnerability intake and the CRA Art. 14
-reporting; no on-call.</li>
-<li><strong>BSP end-of-life assessment, €1,500:</strong> your Yocto series, kernel, bootloader and vendor BSP with their published
-support dates, newer lines from the same vendors and a migration step list.</li></ul>
-<p>You test and deploy; I never flash devices in the field. <a href="mailto:{e['services_contact']}">Ask for a slot</a>.</p>"""
+    return f"""<h2>Need this for your own product?</h2>
+<p>The dataset stays facts only. Separately, its maintainer offers fixed-price, async, remote services for embedded Linux
+makers: a CRA readiness pre-assessment from your firmware image, a BSP end-of-life assessment, and a vulnerability triage
+retainer. Advisory, not a conformity assessment. <a href="{e['services_url']}">Details and prices</a>{sample} ·
+<a href="mailto:{e['services_contact']}">email</a>.</p>"""
+
+
+def about_line(cfg: dict) -> str:
+    """Who runs the site and how it works: trust for a dataset people are asked to rely on."""
+    e = {k: html.escape(v) for k, v in cfg.items()}
+    return (f'<p style="color:var(--mut)">Maintained by János Naumann (<a href="https://asknau.com/en/about/">ASK NAU</a>) · '
+            f'<a href="{e["repo_url"]}">source code</a> · <a href="{e["method_url"]}">method and findings</a> · '
+            f'corrections: <a href="mailto:{e["api_contact"]}">{e["api_contact"]}</a></p>')
+
+
+def sitemap_xml(names: list[str], base: str) -> str:
+    """Sitemap for the HTML pages (the item pages are what people search for)."""
+    urls = "".join(f"<url><loc>{html.escape(base + ('' if n == 'index.html' else n))}</loc></url>" for n in sorted(names))
+    return f"<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>{urls}</urlset>"
 
 
 def bms_page(recs: list, cfg: dict) -> str:
@@ -412,7 +424,8 @@ and software list; get the published dates for each item with sources, before yo
 watch list for your customers' sites and a monthly change report with sources; email alerts as they go live.
 <a href="{e['checkout_bms_watch']}">Join</a>.</p>"""
     return f"""<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>
-<title>Building Automation Support Dates</title><style>
+<title>Building Automation Support Dates</title>{ICON_LINK}
+<meta name=description content="Published end-of-support dates for Tridium Niagara, Johnson Controls Metasys and Ignition, with sources and a dated change log."><style>
 :root{{--bg:#fff;--fg:#1b1f24;--line:#d9dee4;--acc:#0b6bcb}}
 @media (prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#111418;--fg:#e6e9ed;--line:#2b323a;--acc:#5aa9ff}}}}
 body{{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;max-width:980px;margin:0 auto;padding:16px}}
@@ -523,7 +536,7 @@ def item_pages(recs: list, events: list[dict], cfg: dict) -> dict[str, str]:
                         + "</li>" for e in hist) or "<li>No change recorded since tracking started.</li>"
         title = f"{r.component} {r.line}: end of support / longevity"
         pages[f"{slug(r.component, r.line)}.html"] = f"""<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content='width=device-width,initial-scale=1'><title>{html.escape(title)}</title>
+<meta name=viewport content='width=device-width,initial-scale=1'><title>{html.escape(title)}</title>{ICON_LINK}
 <meta name=description content="{html.escape(f'{r.component} {r.line}: published end of support {r.eol or "not announced"}, with source and dated change history.')}">
 <style>body{{font:15px/1.5 system-ui,sans-serif;max-width:760px;margin:0 auto;padding:16px}}</style></head><body>
 <p><a href="index.html">All components</a></p><h1>{html.escape(r.component)} {html.escape(r.line)}</h1>
@@ -578,7 +591,8 @@ def cmd_site(args) -> int:
                  f"{html.escape(str(e.get('new', e.get('eol', ''))))} (<a href='{html.escape(e['snapshot'])}'>archived page</a>)</li>"
                  for e in reversed(moved)) or "<li>No archive-derived history.</li>"
     page = f"""<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>
-<title>Embedded Support Dates</title><style>
+<title>Embedded Support Dates</title>{ICON_LINK}
+<meta name=description content="Published support and end-of-life dates of embedded platforms (SoMs, SoCs, BSPs, RTOS, SDKs), archived daily with sources, timestamped proofs and a dated change log."><style>
 :root{{--bg:#fff;--fg:#1b1f24;--mut:#5b6470;--line:#d9dee4;--acc:#0b6bcb}}
 @media (prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#111418;--fg:#e6e9ed;--mut:#9aa4af;--line:#2b323a;--acc:#5aa9ff}}}}
 body{{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;max-width:980px;margin:0 auto;padding:16px}}
@@ -598,7 +612,7 @@ published support policy (derived), with the source link. Facts only, no assessm
 announcement dates. Gaps where the archive has no usable capture.</p><ul>{bk}</ul>
 <p style="color:var(--mut)">Facts with sources only; no recommendations. Vendor and product names are used to identify the
 products the dates refer to. <a href="{html.escape(SITE_CONFIG['imprint_url'])}">Imprint</a> ·
-<a href="{html.escape(SITE_CONFIG['privacy_url'])}">Privacy</a></p><p style="color:var(--mut)">{DATA_LICENCE}</p></body></html>"""
+<a href="{html.escape(SITE_CONFIG['privacy_url'])}">Privacy</a></p>{about_line(SITE_CONFIG)}<p style="color:var(--mut)">{DATA_LICENCE}</p></body></html>"""
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(page)
@@ -619,6 +633,10 @@ products the dates refer to. <a href="{html.escape(SITE_CONFIG['imprint_url'])}"
     pages = item_pages(recs, events, SITE_CONFIG)
     for name, text in pages.items():
         (out / name).write_text(text)
+    (out / "sitemap.xml").write_text(sitemap_xml(["index.html", "bms.html", *pages], SITE_URL))
+    (out / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {SITE_URL}sitemap.xml\n")
+    if FAVICON.exists():
+        (out / "favicon.svg").write_bytes(FAVICON.read_bytes())
     print(f"wrote {len(pages)} item pages")
     print(f"wrote {out / 'index.html'} ({len(recs)} records, {len(changes)} changes)")
     return 0

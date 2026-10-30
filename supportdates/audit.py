@@ -69,27 +69,60 @@ def fragments(page: str) -> set[str]:
     return {norm(c) for c in cells} | {norm(i) for c in cells for i in c.split(",") if i.strip()}
 
 
+def rows(page: str) -> list[str]:
+    """Table rows of raw HTML (only these when the page has tables: menus don't count), else list items and
+    paragraphs, else the lines of PDF text."""
+    tables = re.findall(r"(?is)<table.*?</table>", page)
+    if tables:
+        return [r for t in tables for r in re.split(r"(?i)<tr\b", t)]
+    if "<" in page:
+        return re.split(r"(?i)<(?:li|p|tr|h\d|br)\b", page)
+    return page.splitlines()
+
+
+def words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+(?:[./-][a-z0-9]+)*", html.unescape(re.sub(r"<[^>]+>", " ", text)).lower())
+
+
+def listed(page: str, line: str, value: str = "") -> bool:
+    """The line appears in one row of the page, with a form of the date value if one is given.
+    The name must be a whole cell (so 'Jetson Xavier NX' is not found inside 'Jetson Xavier NX 16GB'), or each of
+    its words a whole cell of the row (composed names: '5.0 Scarthgap' from the cells 'Scarthgap' and '5.0'), or,
+    on HTML pages without cells, each a whole word of the item ('3.5 LTS' in 'Version 3.5 ... (LTS)')."""
+    squash = lambda t: re.sub(r"[\s()]+", "", re.sub(r"<[^>]+>", " ", t).lower())   # noqa: E731
+    name, tokens = squash(line), words(line)
+    forms = [squash(f) for f in date_forms(value)] if value else []
+    prose = "<" in page and not re.search(r"(?i)<t[dh]\b", page)     # PDF text and cells: whole cells only
+    for row in rows(page):
+        cells = fragments(row)
+        # composed names only: 'Walnascar (aka Walna)' gives 'walnascar'; a single word must stay a whole cell
+        heads = {w[0] for c in re.split(r"<[^>]+>|\n", row) if (w := words(c))} if len(tokens) > 1 else set()
+        found = (any(f == name or f.endswith("/" + name) for f in cells) or all(t in cells | heads for t in tokens)
+                 or (prose and all(t in words(row) for t in tokens)))
+        if found and (not forms or any(f in squash(row) for f in forms)):
+            return True
+    return False
+
+
 def check_event(event: dict, before: str, after: str) -> str:
     """Archive history event vs. the two archived pages it was derived from: 'confirmed', 'contradicted' or
-    'unverifiable' (names under 4 characters can't be shown absent, they occur everywhere)."""
+    'unverifiable'. Added/removed lines with a quoted date are checked as (line, date) in one row, since the
+    parsers only keep dated lines ('4.19 | TBD' becomes a record once a date is published). Undated names under
+    4 characters can't be shown absent, they occur everywhere."""
     if event.get("kind") == "notice" or ": " in event["line"]:
         return "unverifiable"      # synthetic lines ('BSP 6 state: Maintenance') aren't on the page
     if "derived" in (event.get("kind"), event.get("old_kind")) and event["change"] not in ("added", "removed"):
         return "unverifiable"      # computed dates aren't on the page; whether the item is listed still is
-    squash = lambda t: re.sub(r"[\s()]+", "", re.sub(r"<[^>]+>", " ", t).lower())   # noqa: E731
-    b, a, name = squash(before), squash(after), squash(event["line"])
+    line = event["line"]
     if event["change"] in ("added", "removed"):
-        if len(name) < 4:
+        value = "" if event.get("kind") == "derived" else event.get("eol") or event.get("released") or ""
+        if not value and len(re.sub(r"[\s()]+", "", line)) < 4:
             return "unverifiable"
-        # whole cells / list items, so 'Jetson Xavier NX' is not found inside 'Jetson Xavier NX 16GB'
-        found = lambda page: any(f == name or f.endswith("/" + name) for f in fragments(page))   # noqa: E731
-        present_before, present_after = found(before), found(after)    # 'Torizon/BSP 7' is the line 'BSP 7' 
         expected = (False, True) if event["change"] == "added" else (True, False)
-        return "confirmed" if (present_before, present_after) == expected else "contradicted"
+        return "confirmed" if (listed(before, line, value), listed(after, line, value)) == expected else "contradicted"
     if event["change"] in ("eol changed", "released changed", "eol refined", "released refined"):
-        old_ok = not event["old"] or any(f.lower().replace(" ", "") in b for f in date_forms(event["old"]))
-        new_ok = any(f.lower().replace(" ", "") in a for f in date_forms(event["new"]))
-        return "confirmed" if name in b and name in a and old_ok and new_ok else "contradicted"
+        ok = listed(before, line, event["old"]) and listed(after, line, event["new"])
+        return "confirmed" if ok else "contradicted"
     return "unverifiable"
 
 

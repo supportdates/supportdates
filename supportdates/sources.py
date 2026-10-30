@@ -238,14 +238,18 @@ KERNEL_URL = "https://www.kernel.org/category/releases.html"
 
 
 def parse_kernel(html_text: str) -> list[Record]:
+    """Longterm table rows. Older archived pages also say 'End of 2015' (kept as the year) and announce a release
+    as '2019-XX-XX' (kept as '2019')."""
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html_text))
     out = []
-    for m in re.finditer(r"\b(\d+\.\d+) (?:Greg Kroah-Hartman|Ben Hutchings|Sasha Levin)[^0-9]*?(\d{4}-\d{2}-\d{2}) (\w{3}, \d{4})", text):
-        line, released, eol = m.groups()
-        mon, year = eol.split(", ")
-        month = list(calendar.month_abbr).index(mon)
-        out.append(Record("Linux kernel LTS", line, released, f"{int(year):04d}-{month:02d}", "official", KERNEL_URL,
-                          f"{line}: released {released}, projected EOL {eol}"))
+    for m in re.finditer(r"\b(\d+\.\d+) (?:Greg Kroah-Hartman|Ben Hutchings|Sasha Levin)[^0-9]*?(\d{4}-[\dX]{2}-[\dX]{2}) "
+                         r"(?:(\w{3}), (\d{4})|End of (\d{4}))", text):
+        line, released, mon, year, end_year = m.groups()
+        released = re.sub(r"(-XX)+$", "", released)
+        eol = end_year or f"{int(year):04d}-{list(calendar.month_abbr).index(mon):02d}"
+        stated = f"End of {end_year}" if end_year else f"{mon}, {year}"
+        out.append(Record("Linux kernel LTS", line, released, eol, "official", KERNEL_URL,
+                          f"{line}: released {released}, projected EOL {stated}"))
     return out
 
 

@@ -83,7 +83,7 @@ def yocto_series(text: str) -> list[str]:
 
 
 # SBOM component name (lowercase) -> dataset component; the release line is major.minor of the version
-SBOM_NAMES = [(r"linux(-yocto|-imx.*|-kernel)?|kernel", "Linux kernel LTS"), (r"(lib)?mbed-?tls", "Mbed TLS"),
+SBOM_NAMES = [(r"linux(-yocto|-imx.*|-kernel|-toradex.*|-ti.*)?|kernel", "Linux kernel LTS"), (r"(lib)?mbed-?tls", "Mbed TLS"),
               (r"openssl|libssl\d*|libcrypto\d*|libopenssl\d*", "OpenSSL"), (r"python3?(-core)?|libpython3[\d.]*", "Python"),
               (r"node(js)?", "Node.js"), (r"containerd", "containerd"), (r"docker(-ce|-engine|-moby)?|moby(-engine)?", "Docker Engine"),
               (r"qt[56]?-?base|qt[56]?-?core|qtbase", "Qt"), (r"mender(-client)?", "Mender Client"),

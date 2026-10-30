@@ -271,7 +271,10 @@ BACKFILL = {"variscite": (src.VARISCITE_URL, src.parse_variscite),
             "nuvoton-plp": (src.NUVOTON_PLP_URL, src.parse_nuvoton_plp, "pdf-layout"),
             "sma": (src.SMA_SUPPORT_URL, src.parse_sma_support, "pdf"),
             "apsystems": (src.APSYSTEMS_SUPPORT_URL, src.parse_apsystems_support, "pdf"),
-            "solaredge": (src.SOLAREDGE_SUPPORT_URL, src.parse_solaredge_support, "pdf")}
+            "solaredge": (src.SOLAREDGE_SUPPORT_URL, src.parse_solaredge_support, "pdf"),
+            "kernel": (src.KERNEL_URL, lambda page, _src: src.parse_kernel(page)),
+            "yocto": (src.YOCTO_URL, lambda page, _src: src.parse_yocto(page)),
+            "openssl": (src.OPENSSL_URL, src.parse_openssl)}
 
 
 def cmd_backfill(args) -> int:

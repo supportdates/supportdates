@@ -53,6 +53,11 @@ class ParseTest(unittest.TestCase):
     def test_kernel(self):
         r = parse_kernel(KERNEL)[0]
         self.assertEqual((r.line, r.released, r.eol), ("6.6", "2023-10-29", "2027-12"))
+        self.assertEqual(r.evidence, "6.6: released 2023-10-29, projected EOL Dec, 2027")
+        old = ("<tr><td>5.4</td><td>Greg Kroah-Hartman &amp; Sasha Levin</td><td>2019-XX-XX</td><td>Dec, 2021</td></tr>"
+               "<tr><td>3.10</td><td>Greg Kroah-Hartman</td><td>2013-06-30</td><td>End of 2015</td></tr>")
+        self.assertEqual([(r.line, r.released, r.eol) for r in parse_kernel(old)],
+                         [("5.4", "2019", "2021-12"), ("3.10", "2013-06-30", "2015")])
 
     def test_espidf_derived(self):
         self.assertEqual(espidf_policy_months("is supported for 30 months after the initial stable release date."), 30)

@@ -76,6 +76,32 @@ class HistoryAuditTest(unittest.TestCase):
         self.assertEqual(check_event({"change": "removed", "line": "Jetson Xavier NX"}, before, after), "confirmed")
         self.assertEqual(check_event({"change": "added", "line": "Jetson Xavier NX 8GB"}, before, after), "confirmed")
 
+    def test_composed_names_in_one_row(self):
+        before = "<table><tr><td>Nanbield</td><td>4.3</td><td>until April 2024</td></tr></table>"
+        after = ("<table><tr><td>Nanbield</td><td>4.3</td><td>until May 2024</td></tr>"
+                 "<tr><td>Walnascar (aka Walna)</td><td>5.2</td><td>until November 2025</td></tr></table>")
+        moved = {"change": "eol changed", "line": "4.3 Nanbield", "old": "2024-04", "new": "2024-05"}
+        self.assertEqual(check_event(moved, before, after), "confirmed")
+        added = {"change": "added", "line": "5.2 Walnascar", "eol": "2025-11"}
+        self.assertEqual(check_event(added, before, after), "confirmed")
+        prefix = "<table><tr><td>Jetson Nano</td></tr></table>"       # one word: no first-word match
+        self.assertEqual(check_event({"change": "removed", "line": "Jetson"}, prefix, ""), "contradicted")
+        split = "<table><tr><td>Nanbield</td><td>4.3</td></tr><tr><td>Walnascar</td><td>5.2</td></tr></table>"
+        self.assertEqual(check_event({"change": "added", "line": "5.2 Nanbield"}, "", split), "contradicted")   # other rows
+
+    def test_prose_items_and_dated_lines(self):
+        before = "<ul><li>Version 3.5 will be supported until 2030-04-08 (LTS)</li></ul>"
+        after = "<ul><li>Version 3.5 will be supported until 2030-04-08 (LTS)</li><li>Version 4.0 until 2027-05-14</li></ul>"
+        self.assertEqual(check_event({"change": "added", "line": "4.0", "eol": "2027-05-14"}, before, after), "confirmed")
+        self.assertEqual(check_event({"change": "added", "line": "3.5 LTS", "eol": "2030-04-08"}, "", after), "confirmed")
+        # a line whose date became unreadable ('End of 2015') is a dated line removed, the row itself stays
+        k_before = "<table><tr><td>3.10</td><td>2013-06-30</td><td>Sep, 2015</td></tr></table>"
+        k_after = "<table><tr><td>3.10</td><td>2013-06-30</td><td>End of 2015</td></tr></table>"
+        self.assertEqual(check_event({"change": "removed", "line": "3.10", "eol": "2015-09"}, k_before, k_after),
+                         "confirmed")
+        self.assertEqual(check_event({"change": "eol changed", "line": "3.10", "old": "2015-09", "new": "2015"},
+                                     k_before, k_after), "confirmed")
+
     def test_sampling_reads_each_page_once(self):
         pages = {"p": self.BEFORE, "s": self.AFTER}
         reads = []

@@ -9,6 +9,10 @@ Vendors publish support periods on web pages and PDFs: RTOS and SDK releases, ke
 - **Verifiable:** daily proof manifests chain the snapshot hash, the per-source document hashes and the previous manifest. They can be timestamped by RFC 3161 authorities; only hashes leave the machine.
 - **Audited:** `supportdates.audit` re-fetches the sources of a random sample of records, or of history events, and checks that the name and date are really there.
 - **Standard outputs:** an endoflife.date-compatible API, ECMA-428 Common Lifecycle Enumeration (CLE) documents, CycloneDX enrichment and an FDA SBOM support addendum (`eolcheck`).
+- **Support-period evidence pack:** `supportdates.evidencepack` compares the published support ends of what a product ships against the support period the manufacturer plans to declare (CRA Art. 13(8) and 13(19)).
+  - **Input:** an SBOM (CycloneDX, SPDX, or a Yocto SPDX directory, reduced to the recipes that install a package in the image) and a short product file (format in the module docstring).
+  - **Output:** a Markdown report (ends sorted shortest first, their dated history with archived before/after pages, later lines), a CSV with the FDA addendum columns, and the dataset snapshot with its proof manifest and RFC 3161 tokens, checkable offline with OpenSSL.
+  - It states facts and their sources; the support period remains the manufacturer's decision.
 
 Python 3.11+, **standard library only**. PDF sources need `pdftotext` (poppler) on the PATH.
 
@@ -31,6 +35,8 @@ python -m supportdates site --data data --out site      # static site + endoflif
 python -m supportdates.cle --data data --out site/cle   # ECMA-428 CLE documents
 python -m supportdates.eolcheck PATH...                 # dates for what a project builds on (west.yml, dependencies.lock,
                                                         # conf/layer.conf, modules.txt, CycloneDX/SPDX SBOMs)
+python -m supportdates.evidencepack product.json --sbom SBOM_OR_SPDX_DIR --data data --out pack/
+                                                        # support-period evidence pack (report, CSV, proofs)
 python -m supportdates.mcp --data data                  # minimal MCP server for coding agents
 make test                                               # unit tests
 ```

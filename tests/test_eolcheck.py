@@ -4,7 +4,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from supportdates.eolcheck import (Finding, addendum_csv, enrich_cyclonedx, fda_addendum, idf_from_lock, markdown_report, match, months_until, newer_lines,
+from supportdates.eolcheck import (Finding, Row, support_gap, addendum_csv, enrich_cyclonedx, fda_addendum, idf_from_lock, markdown_report, match, months_until, newer_lines,
                                    release_line, report, resolve, sbom_components, sbom_entries, sbom_finding, scan, yocto_series,
                                    zephyr_from_west)
 from supportdates.sources import Record
@@ -76,6 +76,21 @@ class ScanReportTest(unittest.TestCase):
         self.assertIn("DART-MX6: end of support 2026 (+2 months)", text)
         self.assertIn("Unknown-SoM", text)
         self.assertIn(-2, months)
+
+    def test_support_gap_names_the_shortest_software_line(self):
+        zephyr = Record("Zephyr", "3.7 LTS", "", "2029-07-27", "official", "z", "e")
+        idf = Record("ESP-IDF", "5.2", "", "2026-08", "derived", "i", "e")
+        som = Record("Variscite SoM", "DART-MX6", "", "2026", "official", "v", "e")
+        rows = [Row(Finding("w", "Zephyr v3.7.0", "Zephyr", "3.7"), zephyr, 0, ""),
+                Row(Finding("d", "ESP-IDF 5.2.1", "ESP-IDF", "5.2"), idf, 0, ""),
+                Row(Finding("m", "DART-MX6", "", "DART-MX6"), som, 0, "")]        # a module: not compared
+        lines = support_gap(rows, "2032-01")
+        self.assertEqual(lines[0], "shortest published software support: ESP-IDF 5.2, end 2026-08, 65 months before 2032-01")
+        self.assertEqual(lines[1], "2 of 2 dated software lines end before 2032-01")
+        self.assertIn("asknau.com", lines[2])
+        self.assertEqual(support_gap(rows[:1], "2029-01"),
+                         ["all 1 dated software lines reach 2029-01; shortest: Zephyr 3.7 LTS, end 2029-07-27"])
+        self.assertIn("no dated software line", support_gap(rows[2:], "2032-01")[0])
 
     def test_unpinned_revision_is_reported(self):
         lines, months = report([Finding("west.yml", "Zephyr main", "Zephyr", "")], RECS, date(2026, 10, 16))

@@ -1,6 +1,6 @@
 """eolcheck: list the published support dates of what an embedded project builds on (facts with sources only).
 
-    python -m supportdates.eolcheck [--data DATA_DIR] [--fail-within MONTHS] [--format text|md] PATH...
+    python -m supportdates.eolcheck [--data DATA_DIR] [--fail-within MONTHS] [--support-end YYYY-MM] [--format text|md] PATH...
 
 PATH may be a project directory or a file. Recognised:
   west.yml               Zephyr revision of the `zephyr` project (e.g. v3.7.0 -> Zephyr 3.7 LTS) and the
@@ -17,6 +17,8 @@ PATH may be a project directory or a file. Recognised:
                          published source and the dataset snapshot. Components the dataset doesn't cover say so.
 Output: one line per finding with the published end-of-support date, its kind and source. --fail-within N exits
 with code 2 if any listed date is within N months of today (a threshold the user chooses; no assessment).
+--support-end YYYY-MM compares the software lines (not modules) with the support end you plan to declare and names
+the shortest one, plus where to get the sourced evidence pack for a product.
 YAML is read with small regexes on purpose (stdlib only): only the fields above are needed.
 """
 
@@ -114,6 +116,48 @@ def sbom_entries(text: str) -> list[dict]:
     return []
 
 
+BUILD_HOST = re.compile(r".*-native|.*-cross(-.*)?|cross-.*|packagegroup-.*|.*-initial")   # not shipped in the image
+
+
+def shipped_entries(docs: list[str]) -> list[dict]:
+    """SBOM components without build-host tools, deduplicated by (name, version)."""
+    seen, out = set(), []
+    for text in docs:
+        for e in sbom_entries(text):
+            k = (e["name"], e["version"])
+            if k not in seen and not BUILD_HOST.fullmatch(e["name"]):
+                seen.add(k)
+                out.append(e)
+    return out
+
+
+def installed_recipes(docs: list[str]) -> list[dict]:
+    """Yocto per-package SPDX documents -> one entry per recipe that has a package in the image (GENERATED_FROM
+    link), with the version of its packages and how many there are. Documents without that link are skipped."""
+    recipes: dict[str, dict] = {}
+    for text in docs:
+        doc = json.loads(text)
+        rel = next((r["relatedSpdxElement"] for r in doc.get("relationships", [])
+                    if r.get("relationshipType") == "GENERATED_FROM"), "")
+        m = re.match(r"DocumentRef-recipe-([^:]+):", rel)
+        if not m or not doc.get("packages"):
+            continue
+        entry = recipes.setdefault(m.group(1), {"name": m.group(1), "version": doc["packages"][0].get("versionInfo", ""),
+                                               "purl": "", "packages": 0})
+        entry["packages"] += 1
+    return sorted(recipes.values(), key=lambda e: e["name"])
+
+
+def sbom_input(path: Path) -> list[dict]:
+    """SBOM entries: a single SBOM file, or a Yocto SPDX directory reduced to the recipes installed in the image."""
+    if path.is_file():
+        return shipped_entries([path.read_text()])
+    files = sorted(path.glob("*.json"))
+    if any(f.name.startswith("recipe-") for f in files):
+        return installed_recipes([f.read_text() for f in files if not f.name.startswith(("recipe-", "runtime-"))])
+    return shipped_entries([f.read_text() for f in files])
+
+
 def sbom_components(text: str) -> list[tuple[str, str]]:
     """(name, version) pairs from a CycloneDX or SPDX JSON document; [] if it is neither."""
     return [(e["name"], e["version"]) for e in sbom_entries(text)]
@@ -138,9 +182,11 @@ def scan(paths: list[Path]) -> list[Finding]:
     files = []
     for p in paths:
         files += sorted(p.rglob("*")) if p.is_dir() else [p]
-    found = []
+    # Yocto create-spdx output: one finding per recipe installed in the image, not per build-only recipe document
+    spdx_dirs = sorted({f.parent for f in files if f.name.startswith("recipe-") and f.name.endswith(".json")})
+    found = [finding for d in spdx_dirs for e in sbom_input(d) if (finding := sbom_finding(e["name"], e["version"], str(d)))]
     for f in files:
-        if not f.is_file():
+        if not f.is_file() or (f.parent in spdx_dirs and f.name.endswith(".json")):
             continue
         name = f.name
         try:
@@ -236,6 +282,27 @@ def report(findings: list[Finding], records: list[Record], today: date) -> tuple
         when = f"{r.eol} ({mu:+d} months)" if mu is not None else (r.eol or "not announced")
         lines.append(f"{f.what:32s} {r.component} {r.line}: end of support {when} [{r.kind}] {r.source}")
     return lines, months
+
+
+PACK_URL = "https://asknau.com/en/services/#embedded-linux-lifecycle-and-cra-readiness"
+
+
+def support_gap(rows: list[Row], support_end: str) -> list[str]:
+    """The shortest published software support end against the support end the user plans to declare. Modules are
+    left out: hardware availability is not a software support period."""
+    y, m = (int(x) for x in support_end.split("-"))
+    software = [r for r in rows if r.record and r.record.kind != "notice" and r.finding.component]
+    dated = [(g, r) for r in software if (g := months_until(r.record.eol, date(y, m, 1))) is not None]
+    if not dated:
+        return [f"no dated software line found to compare with {support_end}"]
+    gap, row = min(dated, key=lambda x: x[0])
+    short = sum(1 for g, _ in dated if g < 0)
+    name = f"{row.record.component} {row.record.line}"
+    if gap >= 0:
+        return [f"all {len(dated)} dated software lines reach {support_end}; shortest: {name}, end {row.record.eol}"]
+    return [f"shortest published software support: {name}, end {row.record.eol}, {-gap} months before {support_end}",
+            f"{short} of {len(dated)} dated software lines end before {support_end}",
+            f"sourced evidence pack for one product (dated history, timestamped proofs): {PACK_URL}"]
 
 
 def newer_lines(rows: list[Row], records: list[Record], today: date) -> list[Record]:
@@ -354,11 +421,19 @@ def addendum_csv(rows: list[dict]) -> str:
     return buf.getvalue()
 
 
+def year_month(value: str) -> str:
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", value):
+        raise argparse.ArgumentTypeError("use YYYY-MM")
+    return value
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*", default=["."])
     ap.add_argument("--data", default=str(Path(__file__).resolve().parent.parent / "data"))
     ap.add_argument("--fail-within", type=int, default=None, metavar="MONTHS")
+    ap.add_argument("--support-end", metavar="YYYY-MM", type=year_month,
+                    help="compare software lines with the support end you plan to declare")
     ap.add_argument("--format", choices=("text", "md"), default="text", help="md: assessment skeleton in Markdown")
     ap.add_argument("--enrich", metavar="CYCLONEDX_JSON", help="print the SBOM with supportdates:* properties added")
     ap.add_argument("--fda-addendum", metavar="SBOM_JSON",
@@ -389,6 +464,8 @@ def main(argv=None) -> int:
     lines, months = report(findings, records, date.today())
     print(f"dataset snapshot {snap[-1].stem}")
     print("\n".join(lines) or "nothing recognised (west.yml, dependencies.lock, conf/layer.conf, modules.txt)")
+    if args.support_end and findings:
+        print("\n".join(support_gap(resolve(findings, records, date.today()), args.support_end)))
     if args.fail_within is not None and any(m <= args.fail_within for m in months):
         return 2
     return 0

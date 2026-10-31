@@ -1,9 +1,12 @@
 import json
+import tempfile
 import unittest
 from datetime import date
+from pathlib import Path
 
-from supportdates.evidencepack import (Fact, coverage, dataset_facts, history, installed_recipes, later_lines, months_to,
-                                       name, render, shipped_entries, tracked_since)
+from supportdates.eolcheck import installed_recipes, scan, shipped_entries
+from supportdates.evidencepack import (Fact, coverage, dataset_facts, history, later_lines, months_to, name, render,
+                                       tracked_since)
 from supportdates.sources import Record
 
 KERNEL = Record("Linux kernel LTS", "6.6", "2023-10-29", "2027-12", "official", "https://www.kernel.org/category/releases.html",
@@ -33,6 +36,16 @@ class EvidencePackTest(unittest.TestCase):
         self.assertEqual(installed_recipes(docs), [
             {"name": "linux-toradex-ti", "version": "6.6.157+git", "purl": "", "packages": 2},
             {"name": "openssl", "version": "3.5.8", "purl": "", "packages": 1}])
+
+    def test_eolcheck_scan_reads_installed_recipes_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "spdx"
+            d.mkdir()
+            (d / "kernel.spdx.json").write_text(package_doc("kernel", "linux-toradex-ti", "6.6.157+git"))
+            recipe = {"spdxVersion": "SPDX-2.2", "packages": [{"name": "python3", "versionInfo": "3.12.14"}]}
+            (d / "recipe-python3.spdx.json").write_text(json.dumps(recipe))     # built, not installed
+            found = scan([Path(tmp)])
+        self.assertEqual([(f.what, f.line_hint) for f in found], [("linux-toradex-ti 6.6.157+git", "6.6")])
 
     def test_shipped_entries_drop_build_host_tools(self):
         doc = json.dumps({"bomFormat": "CycloneDX", "components": [{"name": "openssl", "version": "3.5.8"},

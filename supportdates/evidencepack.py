@@ -25,12 +25,9 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from .eolcheck import addendum_csv, fda_addendum, match, months_until, sbom_entries, sbom_finding
+from .eolcheck import addendum_csv, fda_addendum, match, months_until, sbom_finding, sbom_input
 from .sources import Record
 from .store import load_snapshot
-
-BUILD_HOST = re.compile(r".*-native|.*-cross(-.*)?|cross-.*|packagegroup-.*|.*-initial")   # not shipped in the image
-
 
 @dataclass(frozen=True)
 class Fact:
@@ -43,35 +40,6 @@ class Fact:
     source: str
     evidence: str
     origin: str             # "dataset 2026-10-29" or "checked by hand 2026-10-29"
-
-
-def shipped_entries(docs: list[str]) -> list[dict]:
-    """SBOM components without build-host tools, deduplicated by (name, version)."""
-    seen, out = set(), []
-    for text in docs:
-        for e in sbom_entries(text):
-            k = (e["name"], e["version"])
-            if k not in seen and not BUILD_HOST.fullmatch(e["name"]):
-                seen.add(k)
-                out.append(e)
-    return out
-
-
-def installed_recipes(docs: list[str]) -> list[dict]:
-    """Yocto per-package SPDX documents -> one entry per recipe that has a package in the image (GENERATED_FROM
-    link), with the version of its packages and how many there are. Documents without that link are skipped."""
-    recipes: dict[str, dict] = {}
-    for text in docs:
-        doc = json.loads(text)
-        rel = next((r["relatedSpdxElement"] for r in doc.get("relationships", [])
-                    if r.get("relationshipType") == "GENERATED_FROM"), "")
-        m = re.match(r"DocumentRef-recipe-([^:]+):", rel)
-        if not m or not doc.get("packages"):
-            continue
-        entry = recipes.setdefault(m.group(1), {"name": m.group(1), "version": doc["packages"][0].get("versionInfo", ""),
-                                               "purl": "", "packages": 0})
-        entry["packages"] += 1
-    return sorted(recipes.values(), key=lambda e: e["name"])
 
 
 def dataset_facts(product: dict, entries: list[dict], records: list[Record], snapshot_day: str) -> list[Fact]:
@@ -230,16 +198,6 @@ def render(product: dict, facts: list[Fact], events: list[dict], first_seen: dic
             "Archive history links to the Internet Archive's copy of each page, so each change can be seen on both "
             "sides."]
     return "\n".join(out) + "\n"
-
-
-def sbom_input(path: Path) -> list[dict]:
-    """SBOM entries: a single SBOM file, or a Yocto SPDX directory reduced to the recipes installed in the image."""
-    if path.is_file():
-        return shipped_entries([path.read_text()])
-    files = sorted(path.glob("*.json"))
-    if any(f.name.startswith("recipe-") for f in files):
-        return installed_recipes([f.read_text() for f in files if not f.name.startswith(("recipe-", "runtime-"))])
-    return shipped_entries([f.read_text() for f in files])
 
 
 def load_events(data: Path) -> list[dict]:
